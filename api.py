@@ -68,23 +68,116 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def map_frontend_to_model(frontend_data: dict) -> dict:
+    """
+    Map frontend form fields to model expected format
+    """
+    data = frontend_data.copy()
+    
+    # Map bp to resting_blood_pressure
+    if data.get("bp") is not None and data.get("resting_blood_pressure") is None:
+        data["resting_blood_pressure"] = data["bp"]
+    
+    # Map thalachh to max_heart_rate_achieved
+    if data.get("thalachh") is not None and data.get("max_heart_rate_achieved") is None:
+        data["max_heart_rate_achieved"] = data["thalachh"]
+    
+    # Map fbs boolean to fasting_blood_sugar int
+    if data.get("fasting_blood_sugar") is None:
+        data["fasting_blood_sugar"] = 1 if data.get("fbs", False) else 0
+    
+    # Map chest_pain boolean to chest_pain_type int
+    if data.get("chest_pain_type") is None:
+        # 0 = typical angina, 1 = atypical angina, 2 = non-anginal pain, 3 = asymptomatic
+        data["chest_pain_type"] = 1 if data.get("chest_pain", False) else 2
+    
+    # Map shortness_of_breath to exercise_induced_angina
+    if data.get("exercise_induced_angina") is None:
+        data["exercise_induced_angina"] = 1 if data.get("shortness_of_breath", False) else 0
+    
+    # Default values for missing required fields
+    defaults = {
+        "age": 50.0,
+        "resting_blood_pressure": 120.0,
+        "cholesterol": 200.0,
+        "max_heart_rate_achieved": 150.0,
+        "st_depression": 0.0,
+        "sex": 1,
+        "chest_pain_type": 2,
+        "fasting_blood_sugar": 0,
+        "resting_ecg": 0,
+        "exercise_induced_angina": 0,
+        "st_slope": 1,
+        "num_major_vessels": 0,
+        "thalassemia": 2
+    }
+    
+    # Apply defaults for missing fields
+    for key, default_value in defaults.items():
+        if data.get(key) is None:
+            data[key] = default_value
+    
+    return data
+
+
 @app.post("/predict")
 def predict(patient: HeartInput):
+    """
+    Predict heart attack risk based on patient data
+    Frontend expects: { probability: float } where probability is 0-1
+    """
+    if model is None or scaler is None:
+        raise HTTPException(status_code=500, detail="Model files not found. Please ensure heart_rf_model.joblib and scaler.joblib are in the directory.")
+    
+    try:
+        patient_dict = patient.dict()
+        
+        # Map frontend fields to model format
+        mapped_data = map_frontend_to_model(patient_dict)
+        
+        # Create DataFrame with model-expected columns
+        model_columns = [
+            "age", "resting_blood_pressure", "cholesterol",
+            "max_heart_rate_achieved", "st_depression",
+            "sex", "chest_pain_type", "fasting_blood_sugar",
+            "resting_ecg", "exercise_induced_angina",
+            "st_slope", "num_major_vessels", "thalassemia"
+        ]
+        
+        # Create DataFrame with correct column order
+        df_data = {col: [mapped_data[col]] for col in model_columns}
+        df = pd.DataFrame(df_data)
+        
+        # Scale numeric features
+        df[numeric_features] = scaler.transform(df[numeric_features])
+        
+        # Predict
+        prediction = int(model.predict(df)[0])
+        probability_raw = model.predict_proba(df)[0][1]  # Probability of heart attack (0-1)
+        probability_percent = round(probability_raw * 100, 2)
+        
+        # Return in format expected by frontend
+        return {
+            "probability": float(probability_raw),  # Frontend expects 0-1
+            "prediction": prediction,
+            "risk_percentage": probability_percent,
+            "health_status": "High Risk" if prediction == 1 else "Low Risk"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
-    # Convert user input → DataFrame
-    df = pd.DataFrame([patient.dict()])
 
-    # Scale only numeric values
-    df[numeric_features] = scaler.transform(df[numeric_features])
-
-    # Predict
-    prediction = int(model.predict(df)[0])
-    probability = round(model.predict_proba(df)[0][1] * 100, 2)
-
-    result = "High Risk" if prediction == 1 else "Low Risk"
-
+@app.get("/health")
+def health():
+    """Health check endpoint"""
     return {
-        "prediction": prediction,
-        "risk_percentage": probability,
-        "health_status": result
+        "status": "ok",
+        "model_loaded": model is not None,
+        "scaler_loaded": scaler is not None
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5000)
