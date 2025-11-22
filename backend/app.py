@@ -39,7 +39,7 @@ def load_or_train_model():
     except FileNotFoundError:
         print("Warning: heart.csv not found. Creating a dummy model.")
         # Create a dummy model for testing
-        model = LogisticRegression(solver='saga', penalty='l1', multi_class='auto', max_iter=1000)
+        model = LogisticRegression(solver='saga', penalty='l1', max_iter=1000)
         # Dummy training data structure
         X_dummy = np.random.rand(100, 11)  # 11 features
         y_dummy = np.random.randint(0, 2, 100)

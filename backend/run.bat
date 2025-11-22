@@ -1,9 +1,9 @@
 @echo off
 echo Installing Python dependencies...
-pip install -r requirements.txt
+..\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
 echo.
 echo Starting Flask server on http://localhost:5000
 echo.
-python app.py
+..\.venv\Scripts\python.exe app.py
 
