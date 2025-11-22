@@ -135,7 +135,8 @@ def predict(patient: HeartInput):
         # Map frontend fields to model format
         mapped_data = map_frontend_to_model(patient_dict)
         
-        # Create DataFrame with model-expected columns
+        # Create DataFrame with model-expected columns in correct order
+        # Model expects 13 features total: 5 numeric (scaled) + 8 categorical (unscaled)
         model_columns = [
             "age", "resting_blood_pressure", "cholesterol",
             "max_heart_rate_achieved", "st_depression",
@@ -144,16 +145,41 @@ def predict(patient: HeartInput):
             "st_slope", "num_major_vessels", "thalassemia"
         ]
         
-        # Create DataFrame with correct column order
-        df_data = {col: [mapped_data[col]] for col in model_columns}
-        df = pd.DataFrame(df_data)
+        # Create DataFrame with correct column order and ensure all values are numeric
+        df_data = {}
+        for col in model_columns:
+            value = mapped_data.get(col, 0)
+            # Convert to float for numeric columns, int for categorical
+            if col in numeric_features:
+                df_data[col] = [float(value)]
+            else:
+                df_data[col] = [int(value)]
         
-        # Scale numeric features
-        df[numeric_features] = scaler.transform(df[numeric_features])
+        df = pd.DataFrame(df_data, columns=model_columns)
         
-        # Predict
-        prediction = int(model.predict(df)[0])
-        probability_raw = model.predict_proba(df)[0][1]  # Probability of heart attack (0-1)
+        # Extract numeric features for scaling
+        numeric_data = df[numeric_features].values
+        
+        # Scale only the numeric features
+        scaled_numeric = scaler.transform(numeric_data)
+        
+        # Replace numeric features with scaled values in the DataFrame
+        for i, feature in enumerate(numeric_features):
+            df[feature] = scaled_numeric[:, i]
+        
+        # Ensure DataFrame has all 13 columns in correct order
+        df_final = df[model_columns].copy()
+        
+        # Debug: Check DataFrame shape and columns
+        if df_final.shape[1] != model.n_features_in_:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Feature mismatch: DataFrame has {df_final.shape[1]} features, but model expects {model.n_features_in_} features. Columns: {list(df_final.columns)}"
+            )
+        
+        # Predict using all 13 features
+        prediction = int(model.predict(df_final)[0])
+        probability_raw = model.predict_proba(df_final)[0][1]  # Probability of heart attack (0-1)
         probability_percent = round(probability_raw * 100, 2)
         
         # Return in format expected by frontend

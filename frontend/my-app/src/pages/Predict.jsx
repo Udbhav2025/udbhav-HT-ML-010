@@ -4,8 +4,13 @@ import "../predict.css";
 
 function Predict() {
   const [form, setForm] = useState({
+    name: "",
+    age: "",
+    sex: "",
     cholesterol: "",
     bp: "",
+    fbs: false,
+    thalachh: "",
     diabetes: false,
     obesity: false,
     shortness_of_breath: false,
@@ -43,7 +48,7 @@ function Predict() {
       });
       if (!response.ok) throw new Error("Server Error!");
       const data = await response.json();
-      setResult(data.probability); // expects backend to return { probability: number }
+      setResult(data); // Store full response object
     } catch (err) {
       setError("Failed to fetch prediction.");
     }
@@ -249,14 +254,50 @@ function Predict() {
             {loading && <p>Loading prediction...</p>}
             {result !== null && (
               <div className="result-card">
-                <h2>Probability Score</h2>
-                <p>
-                  {form.name ? <strong>{form.name}, </strong> : null}
-                  your predicted risk of heart attack:{" "}
-                  <span className="probability-score">
-                    {(result * 100).toFixed(2)}%
-                  </span>
-                </p>
+                <h2>Prediction Results</h2>
+                {form.name && (
+                  <p style={{ fontSize: "1.1rem", marginBottom: "1rem" }}>
+                    <strong>{form.name}</strong>
+                  </p>
+                )}
+                <div style={{ marginBottom: "1rem" }}>
+                  <p>
+                    <strong>Health Status:</strong>{" "}
+                    <span
+                      style={{
+                        color: result.health_status === "High Risk" ? "#dc3545" : "#28a745",
+                        fontWeight: "bold",
+                        fontSize: "1.2rem"
+                      }}
+                    >
+                      {result.health_status}
+                    </span>
+                  </p>
+                </div>
+                <div style={{ marginBottom: "1rem" }}>
+                  <p>
+                    <strong>Risk Percentage:</strong>{" "}
+                    <span className="probability-score">
+                      {result.risk_percentage?.toFixed(2) || (result.probability * 100).toFixed(2)}%
+                    </span>
+                  </p>
+                </div>
+                <div style={{ marginBottom: "1rem" }}>
+                  <p>
+                    <strong>Prediction:</strong>{" "}
+                    {result.prediction === 1 ? (
+                      <span style={{ color: "#dc3545", fontWeight: "bold" }}>At Risk</span>
+                    ) : (
+                      <span style={{ color: "#28a745", fontWeight: "bold" }}>Not At Risk</span>
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <p>
+                    <strong>Probability Score:</strong>{" "}
+                    <span>{(result.probability * 100).toFixed(2)}%</span>
+                  </p>
+                </div>
               </div>
             )}
             {error && <p className="error">{error}</p>}
