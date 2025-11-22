@@ -180,5 +180,4 @@ function Predict() {
     </div>
   );
 }
-
 export default Predict;
